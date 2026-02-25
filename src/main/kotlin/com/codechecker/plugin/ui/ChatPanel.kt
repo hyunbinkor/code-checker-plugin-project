@@ -1,0 +1,321 @@
+package com.codechecker.plugin.ui
+
+import com.codechecker.plugin.model.CheckResult
+import com.codechecker.plugin.model.ErrorType
+import com.codechecker.plugin.service.CodeCheckService
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.project.Project
+import com.intellij.ui.JBColor
+import com.intellij.ui.components.JBLabel
+import com.intellij.ui.components.JBPanel
+import com.intellij.ui.components.JBScrollPane
+import com.intellij.util.ui.JBUI
+import java.awt.CardLayout
+import java.awt.Component
+import java.awt.Dimension
+import java.awt.FlowLayout
+import java.awt.Font
+import java.awt.GridBagConstraints
+import java.awt.GridBagLayout
+import javax.swing.Box
+import javax.swing.JButton
+import javax.swing.JPanel
+import javax.swing.JSeparator
+import javax.swing.SwingUtilities
+
+class ChatPanel(private val project: Project) : JBPanel<ChatPanel>(java.awt.BorderLayout()) {
+
+    // ── 버튼 ─────────────────────────────────────
+
+    private val checkSelectionButton = JButton("선택 검사").apply {
+        toolTipText = "에디터에서 드래그로 선택한 코드 영역을 검사합니다"
+    }
+    private val checkFileButton = JButton("파일 검사").apply {
+        toolTipText = "현재 열린 파일 전체를 검사합니다"
+    }
+
+    // ── 메시지 목록 ───────────────────────────────
+
+    private val messagesBox: Box = Box.createVerticalBox()
+    private val scrollPane: JBScrollPane = JBScrollPane(messagesBox).apply {
+        border = JBUI.Borders.empty()
+        verticalScrollBar.unitIncrement = JBUI.scale(16)
+    }
+
+    // ── CardLayout (빈 상태 ↔ 메시지 목록 전환) ──
+
+    private val cardLayout = CardLayout()
+    private val cardPanel = JPanel(cardLayout)
+
+    // ── 로딩 상태 추적 ────────────────────────────
+
+    private var loadingBubble: LoadingMessageBubble? = null
+    private var checkStartTime: Long = 0L
+
+    // ── 초기화 ───────────────────────────────────
+
+    init {
+        border = JBUI.Borders.empty(4)
+        add(buildCenterPanel(), java.awt.BorderLayout.CENTER)
+        add(buildSouthPanel(), java.awt.BorderLayout.SOUTH)
+        setupButtons()
+    }
+
+    // ── 레이아웃 빌드 ─────────────────────────────
+
+    private fun buildCenterPanel(): JPanel {
+        messagesBox.add(Box.createRigidArea(Dimension(0, JBUI.scale(4))))
+
+        cardPanel.add(buildEmptyStatePanel(), "EMPTY")
+        cardPanel.add(scrollPane, "MESSAGES")
+
+        // 초기 상태: 빈 안내 화면
+        cardLayout.show(cardPanel, "EMPTY")
+
+        return cardPanel
+    }
+
+    private fun buildEmptyStatePanel(): JPanel {
+        return JBPanel<JBPanel<*>>(GridBagLayout()).apply {
+            isOpaque = false
+
+            val gbc = GridBagConstraints().apply {
+                gridx = 0
+                gridy = 0
+                anchor = GridBagConstraints.CENTER
+            }
+
+            val box = Box.createVerticalBox()
+
+            val iconLabel = JBLabel("🔍").apply {
+                font = font.deriveFont(32f)
+                alignmentX = Component.CENTER_ALIGNMENT
+            }
+
+            val titleLabel = JBLabel("Code Quality Checker").apply {
+                font = font.deriveFont(Font.BOLD, 14f)
+                foreground = JBColor.foreground()
+                alignmentX = Component.CENTER_ALIGNMENT
+            }
+
+            val descLabel = JBLabel(
+                "<html><center>" +
+                        "· <b>파일 검사</b>: 현재 열린 Java 파일 전체를 검사합니다<br><br>" +
+                        "· <b>선택 검사</b>: 에디터에서 코드를 드래그로 선택한 후<br>" +
+                        "검사 버튼을 눌러 선택 영역만 검사합니다" +
+                        "</center></html>"
+            ).apply {
+                foreground = JBColor.GRAY
+                font = font.deriveFont(12f)
+                alignmentX = Component.CENTER_ALIGNMENT
+            }
+
+            box.add(iconLabel)
+            box.add(Box.createRigidArea(Dimension(0, JBUI.scale(8))))
+            box.add(titleLabel)
+            box.add(Box.createRigidArea(Dimension(0, JBUI.scale(12))))
+            box.add(descLabel)
+
+            add(box, gbc)
+        }
+    }
+
+    private fun buildSouthPanel(): JPanel {
+        val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(4), JBUI.scale(4))).apply {
+            isOpaque = false
+            add(checkSelectionButton)
+            add(checkFileButton)
+        }
+
+        return JPanel(java.awt.BorderLayout()).apply {
+            isOpaque = false
+            add(JSeparator(), java.awt.BorderLayout.NORTH)
+            add(buttonPanel, java.awt.BorderLayout.CENTER)
+        }
+    }
+
+    // ── 버튼 액션 ─────────────────────────────────
+
+    private fun setupButtons() {
+        checkSelectionButton.addActionListener {
+            requestCheckSelection()
+        }
+        checkFileButton.addActionListener {
+            requestCheckFile()
+        }
+    }
+
+    private fun requestCheckSelection() {
+        val editor = FileEditorManager
+            .getInstance(project)
+            .selectedTextEditor ?: run {
+            addSystemMessage("열린 파일이 없습니다. Java 파일을 열고 다시 시도하세요.")
+            return
+        }
+
+        val selectedText = editor.selectionModel.selectedText
+        if (selectedText.isNullOrBlank()) {
+            addSystemMessage("선택된 코드가 없습니다. 에디터에서 코드를 드래그로 선택한 후 버튼을 눌러주세요.")
+            return
+        }
+
+        val fileName = getCurrentFileName() ?: "unknown.java"
+        val lineCount = selectedText.lines().size
+        submitCheck(selectedText, fileName, lineCount)
+    }
+
+    private fun requestCheckFile() {
+        val editor = FileEditorManager
+            .getInstance(project)
+            .selectedTextEditor ?: run {
+            addSystemMessage("열린 파일이 없습니다. Java 파일을 열고 다시 시도하세요.")
+            return
+        }
+
+        val code = editor.document.text
+        val fileName = getCurrentFileName() ?: "unknown.java"
+        val lineCount = editor.document.lineCount
+        submitCheck(code, fileName, lineCount)
+    }
+
+    private fun getCurrentFileName(): String? {
+        return FileEditorManager
+            .getInstance(project)
+            .selectedFiles
+            .firstOrNull()
+            ?.name
+    }
+
+    // ── 공개 API ──────────────────────────────────
+
+    /**
+     * 코드 검사 실행.
+     * Action 클래스(CheckSelectionAction, CheckFileAction)에서도 직접 호출 가능.
+     *
+     * @param code      검사할 소스 코드
+     * @param fileName  파일명
+     * @param lineCount 라인 수 (사용자 메시지 표시용)
+     */
+    fun submitCheck(code: String, fileName: String, lineCount: Int) {
+        // 1. 사용자 메시지 추가
+        addUserMessage(fileName, lineCount, code)
+
+        // 2. 로딩 메시지 추가
+        val loading = addLoadingMessage(fileName)
+
+        // 3. 버튼 비활성화
+        setButtonsEnabled(false)
+
+        checkStartTime = System.currentTimeMillis()
+
+        // 4. 백그라운드에서 검사 실행
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val result = CodeCheckService.getInstance().checkCode(
+                code = code,
+                fileName = fileName,
+                onHeartbeat = {
+                    ApplicationManager.getApplication().invokeLater {
+                        val elapsed = (System.currentTimeMillis() - checkStartTime) / 1000
+                        loading.updateElapsed(elapsed)
+                    }
+                }
+            )
+
+            // 5. EDT에서 UI 업데이트
+            ApplicationManager.getApplication().invokeLater {
+                removeLoadingMessage()
+
+                when (result) {
+                    is CheckResult.Success -> addResultMessage(result)
+                    is CheckResult.Failure -> addErrorMessage(result.message, result.type)
+                }
+
+                setButtonsEnabled(true)
+            }
+        }
+    }
+
+    /**
+     * 메시지 전부 제거 후 빈 상태 화면으로 복귀.
+     */
+    fun clear() {
+        messagesBox.removeAll()
+        messagesBox.add(Box.createRigidArea(Dimension(0, JBUI.scale(4))))
+        loadingBubble = null
+        messagesBox.revalidate()
+        messagesBox.repaint()
+
+        // 빈 상태 화면으로 복귀
+        cardLayout.show(cardPanel, "EMPTY")
+    }
+
+    // ── 메시지 추가 내부 메서드 ───────────────────
+
+    private fun addUserMessage(fileName: String, lineCount: Int, code: String) {
+        val bubble = UserMessageBubble(fileName, lineCount, code)
+        appendMessage(bubble)
+    }
+
+    private fun addLoadingMessage(fileName: String): LoadingMessageBubble {
+        val bubble = LoadingMessageBubble(fileName)
+        loadingBubble = bubble
+        appendMessage(bubble)
+        bubble.startTimer()
+        return bubble
+    }
+
+    private fun removeLoadingMessage() {
+        val bubble = loadingBubble ?: return
+        bubble.stopTimer()
+        messagesBox.remove(bubble)
+        loadingBubble = null
+        messagesBox.revalidate()
+        messagesBox.repaint()
+    }
+
+    private fun addResultMessage(result: CheckResult.Success) {
+        val bubble = ResultMessageBubble(result.response, project)
+        appendMessage(bubble)
+    }
+
+    private fun addErrorMessage(message: String, type: ErrorType) {
+        val bubble = ErrorMessageBubble(message, type)
+        appendMessage(bubble)
+    }
+
+    private fun addSystemMessage(message: String) {
+        val label = JBLabel(message).apply {
+            foreground = JBColor.GRAY
+            border = JBUI.Borders.empty(4, 8)
+            alignmentX = Component.LEFT_ALIGNMENT
+            maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height)
+        }
+        appendMessage(label)
+    }
+
+    /**
+     * 컴포넌트를 messagesBox에 추가하고 자동 스크롤.
+     * 첫 메시지 추가 시 빈 상태 → 메시지 목록으로 카드 전환.
+     */
+    private fun appendMessage(component: Component) {
+        // 첫 메시지 추가 시 메시지 목록 카드로 전환
+        cardLayout.show(cardPanel, "MESSAGES")
+
+        messagesBox.add(Box.createRigidArea(Dimension(0, JBUI.scale(8))))
+        messagesBox.add(component)
+        messagesBox.revalidate()
+        messagesBox.repaint()
+
+        // 자동 스크롤 (레이아웃 완료 후)
+        SwingUtilities.invokeLater {
+            val vsb = scrollPane.verticalScrollBar
+            vsb.value = vsb.maximum
+        }
+    }
+
+    private fun setButtonsEnabled(enabled: Boolean) {
+        checkSelectionButton.isEnabled = enabled
+        checkFileButton.isEnabled = enabled
+    }
+}
