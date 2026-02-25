@@ -17,8 +17,8 @@
         이슈를 채팅 UI에서 카드 형태로 확인합니다.
     ]]></description>
 
-    <!-- IntelliJ IDEA 2024.1 이상 필요 -->
-    <idea-version since-build="241" until-build="251.*"/>
+    <!-- since-build만 지정, until-build 제거 → 241 이상 모든 버전 허용 -->
+    <idea-version since-build="241"/>
 
     <!-- 플랫폼 모듈 의존 -->
     <depends>com.intellij.modules.platform</depends>
@@ -33,28 +33,28 @@
 
         <!-- 1. Tool Window -->
         <toolWindow
-            id="CodeChecker"
-            anchor="right"
-            factoryClass="com.codechecker.plugin.toolwindow.CodeCheckerToolWindowFactory"
-            icon="AllIcons.Actions.Search"
-            canCloseContents="false"/>
+                id="CodeChecker"
+                anchor="right"
+                factoryClass="com.codechecker.plugin.toolwindow.CodeCheckerToolWindowFactory"
+                icon="AllIcons.Actions.Search"
+                canCloseContents="false"/>
 
         <!-- 4. Settings (applicationConfigurable) -->
         <applicationConfigurable
-            id="com.codechecker.plugin.settings"
-            displayName="Code Quality Checker"
-            parentId="tools"
-            instance="com.codechecker.plugin.settings.PluginSettingsConfigurable"/>
+                id="com.codechecker.plugin.settings"
+                displayName="Code Quality Checker"
+                parentId="tools"
+                instance="com.codechecker.plugin.settings.PluginSettingsConfigurable"/>
 
         <!-- 5. Application Service -->
         <applicationService
-            serviceImplementation="com.codechecker.plugin.settings.PluginSettings"/>
+                serviceImplementation="com.codechecker.plugin.settings.PluginSettings"/>
 
         <!-- 6. Notification Group -->
         <notificationGroup
-            id="CodeChecker.Notification"
-            displayType="BALLOON"
-            isLogByDefault="true"/>
+                id="CodeChecker.Notification"
+                displayType="BALLOON"
+                isLogByDefault="true"/>
 
     </extensions>
 
@@ -66,33 +66,33 @@
 
         <!-- 2. Action Group: 에디터 우클릭 메뉴에 추가 -->
         <group
-            id="CodeChecker.ActionGroup"
-            text="Code Quality Checker"
-            description="코드 품질 검사 메뉴"
-            popup="true"
-            icon="AllIcons.Actions.Search">
+                id="CodeChecker.ActionGroup"
+                text="Code Quality Checker"
+                description="코드 품질 검사 메뉴"
+                popup="true"
+                icon="AllIcons.Actions.Search">
 
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
 
             <!-- 3-a. 선택 영역 검사 -->
             <action
-                id="CodeChecker.CheckSelection"
-                class="com.codechecker.plugin.action.CheckSelectionAction"
-                text="선택 영역 검사"
-                description="선택한 코드의 품질을 검사합니다"
-                icon="AllIcons.Actions.FindAndShowNextMatchesWithChecks">
+                    id="CodeChecker.CheckSelection"
+                    class="com.codechecker.plugin.action.CheckSelectionAction"
+                    text="선택 영역 검사"
+                    description="선택한 코드의 품질을 검사합니다"
+                    icon="AllIcons.Actions.FindAndShowNextMatchesWithChecks">
                 <keyboard-shortcut
-                    keymap="$default"
-                    first-keystroke="ctrl shift Q"/>
+                        keymap="$default"
+                        first-keystroke="ctrl shift Q"/>
             </action>
 
             <!-- 3-b. 파일 전체 검사 -->
             <action
-                id="CodeChecker.CheckFile"
-                class="com.codechecker.plugin.action.CheckFileAction"
-                text="파일 전체 검사"
-                description="현재 파일 전체의 코드 품질을 검사합니다"
-                icon="AllIcons.Actions.InspectionsEye"/>
+                    id="CodeChecker.CheckFile"
+                    class="com.codechecker.plugin.action.CheckFileAction"
+                    text="파일 전체 검사"
+                    description="현재 파일 전체의 코드 품질을 검사합니다"
+                    icon="AllIcons.Actions.InspectionsEye"/>
 
         </group>
 

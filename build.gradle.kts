@@ -9,10 +9,6 @@ plugins {
 group = "com.codechecker.plugin"
 version = "0.1.0"
 
-// kotlin { jvmToolchain(N) } 제거
-// → JDK 자동 탐색 강제 없이 현재 JAVA_HOME(23) 그대로 사용
-// → 바이트코드 타겟만 17로 지정 (아래 tasks 블록에서)
-
 repositories {
     mavenCentral()
     intellijPlatform {
@@ -40,7 +36,7 @@ intellijPlatform {
 
         ideaVersion {
             sinceBuild = "241"
-            untilBuild = "251.*"
+            untilBuild = provider { null }  // 자동 생성 차단 → 상한선 없음
         }
     }
 

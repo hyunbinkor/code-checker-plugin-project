@@ -1,20 +1,23 @@
 package com.codechecker.plugin.settings
 
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.PersistentStateComponent
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
+import com.intellij.openapi.components.service
 
+@Service(Service.Level.APP)
 @State(
-    name = "com.codechecker.plugin.settings.PluginSettings",
-    storages = [Storage("CodeQualityChecker.xml")]
+    name = "CodeCheckerSettings",
+    storages = [Storage("CodeCheckerPlugin.xml")]
 )
 class PluginSettings : PersistentStateComponent<PluginSettings.State> {
 
     data class State(
         var serverUrl: String = "http://localhost:3000",
         var readTimeoutSeconds: Int = 900,
-        var outputFormat: String = "json"
+        var outputFormat: String = "json",
+        var useMockMode: Boolean = false
     )
 
     private var state = State()
@@ -25,7 +28,6 @@ class PluginSettings : PersistentStateComponent<PluginSettings.State> {
         this.state = state
     }
 
-    // 편의 접근자
     var serverUrl: String
         get() = state.serverUrl
         set(value) { state.serverUrl = value }
@@ -38,8 +40,11 @@ class PluginSettings : PersistentStateComponent<PluginSettings.State> {
         get() = state.outputFormat
         set(value) { state.outputFormat = value }
 
+    var useMockMode: Boolean
+        get() = state.useMockMode
+        set(value) { state.useMockMode = value }
+
     companion object {
-        fun getInstance(): PluginSettings =
-            ApplicationManager.getApplication().getService(PluginSettings::class.java)
+        fun getInstance(): PluginSettings = service()
     }
 }

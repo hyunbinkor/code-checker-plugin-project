@@ -3,32 +3,40 @@ package com.codechecker.plugin.settings
 import com.intellij.openapi.options.Configurable
 import javax.swing.JComponent
 
+/**
+ * Settings → Tools → Code Quality Checker 진입점.
+ *
+ * plugin.xml에서 applicationConfigurable (parentId="tools")로 등록.
+ * projectConfigurable이 아닌 이유: PluginSettings가 application 레벨 서비스이므로
+ * 프로젝트와 무관하게 IDE 전역 설정으로 관리함.
+ *
+ * UI 레이아웃은 [PluginSettingsPanel]에 위임하여
+ * Configurable 생명주기 코드와 UI 코드를 분리함.
+ */
 class PluginSettingsConfigurable : Configurable {
 
-    private var settingsPanel: PluginSettingsPanel? = null
+    private var panel: PluginSettingsPanel? = null
 
     override fun getDisplayName(): String = "Code Quality Checker"
 
     override fun createComponent(): JComponent {
-        // TODO: PluginSettingsPanel 구현 후 연결
-        settingsPanel = PluginSettingsPanel()
-        return settingsPanel!!.root
+        val newPanel = PluginSettingsPanel()
+        panel = newPanel
+        return newPanel.root
     }
 
-    override fun isModified(): Boolean {
-        // TODO: 현재 UI 값이 저장된 값과 다른지 비교
-        return false
-    }
+    override fun isModified(): Boolean =
+        panel?.isModified() ?: false
 
     override fun apply() {
-        // TODO: UI 값을 PluginSettings에 저장
+        panel?.apply()
     }
 
     override fun reset() {
-        // TODO: PluginSettings 값을 UI에 반영
+        panel?.reset()
     }
 
     override fun disposeUIResources() {
-        settingsPanel = null
+        panel = null
     }
 }
