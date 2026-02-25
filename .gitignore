@@ -3,6 +3,7 @@ build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
+step-by-step-execution-plan.MD
 
 ### IntelliJ IDEA ###
 .idea/modules.xml
