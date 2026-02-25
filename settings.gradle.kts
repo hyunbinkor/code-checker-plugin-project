@@ -1,8 +1,8 @@
 pluginManagement {
     repositories {
-        mavenCentral()
         gradlePluginPortal()
+        mavenCentral()
     }
 }
 
-rootProject.name = "intellij-gpt"
+rootProject.name = "intellij-code-quality-checker"
