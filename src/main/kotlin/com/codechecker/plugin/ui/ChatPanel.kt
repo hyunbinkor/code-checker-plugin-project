@@ -18,6 +18,7 @@ import java.awt.FlowLayout
 import java.awt.Font
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
+import java.util.WeakHashMap
 import javax.swing.Box
 import javax.swing.JButton
 import javax.swing.JPanel
@@ -140,6 +141,10 @@ class ChatPanel(private val project: Project) : JBPanel<ChatPanel>(java.awt.Bord
         checkFileButton.addActionListener { requestCheckFile() }
     }
 
+    /**
+     * 선택 검사 버튼 동작.
+     * .java 파일 여부 확인 → 선택 영역 확인 → submitCheck()
+     */
     private fun requestCheckSelection() {
         val editor = FileEditorManager
             .getInstance(project)
@@ -148,16 +153,27 @@ class ChatPanel(private val project: Project) : JBPanel<ChatPanel>(java.awt.Bord
             return
         }
 
-        val selectedText = editor.selectionModel.selectedText
-        if (selectedText.isNullOrBlank()) {
-            addSystemMessage("선택된 코드가 없습니다. 에디터에서 코드를 드래그로 선택한 후 버튼을 눌러주세요.")
+        // .java 파일 여부 확인
+        val fileName = getCurrentFileName() ?: "unknown.java"
+        if (!fileName.endsWith(".java")) {
+            addSystemMessage("Java 파일만 검사할 수 있습니다. (.java) 현재 파일: $fileName")
             return
         }
 
-        val fileName = getCurrentFileName() ?: "unknown.java"
+        // 선택 영역 확인
+        val selectedText = editor.selectionModel.selectedText
+        if (selectedText.isNullOrBlank()) {
+            addSystemMessage("코드를 먼저 선택해주세요. 에디터에서 코드를 드래그로 선택한 후 버튼을 눌러주세요.")
+            return
+        }
+
         submitCheck(selectedText, fileName, selectedText.lines().size)
     }
 
+    /**
+     * 파일 검사 버튼 동작.
+     * .java 파일 여부 확인 → 파일 내용 확인 → submitCheck()
+     */
     private fun requestCheckFile() {
         val editor = FileEditorManager
             .getInstance(project)
@@ -166,8 +182,21 @@ class ChatPanel(private val project: Project) : JBPanel<ChatPanel>(java.awt.Bord
             return
         }
 
+        // .java 파일 여부 확인
         val fileName = getCurrentFileName() ?: "unknown.java"
-        submitCheck(editor.document.text, fileName, editor.document.lineCount)
+        if (!fileName.endsWith(".java")) {
+            addSystemMessage("Java 파일만 검사할 수 있습니다. (.java) 현재 파일: $fileName")
+            return
+        }
+
+        // 파일 내용 확인
+        val code = editor.document.text
+        if (code.isBlank()) {
+            addSystemMessage("파일이 비어 있습니다.")
+            return
+        }
+
+        submitCheck(code, fileName, editor.document.lineCount)
     }
 
     private fun getCurrentFileName(): String? =
@@ -193,7 +222,6 @@ class ChatPanel(private val project: Project) : JBPanel<ChatPanel>(java.awt.Bord
         var elapsed = 0
         val timer = Timer(1000) {
             elapsed++
-            // Timer 콜백은 이미 EDT에서 실행됨
             loading.updateElapsedTime(elapsed)
         }.apply {
             isRepeats = true
@@ -206,7 +234,6 @@ class ChatPanel(private val project: Project) : JBPanel<ChatPanel>(java.awt.Bord
                 code = code,
                 fileName = fileName,
                 onHeartbeat = {
-                    // heartbeat 수신 → EDT에서 상태 텍스트 갱신
                     SwingUtilities.invokeLater {
                         loading.onHeartbeatReceived()
                     }
@@ -215,9 +242,7 @@ class ChatPanel(private val project: Project) : JBPanel<ChatPanel>(java.awt.Bord
 
             // 6. EDT에서 UI 업데이트
             SwingUtilities.invokeLater {
-                // Timer 정지
                 timer.stop()
-
                 removeLoadingMessage()
 
                 when (result) {
@@ -271,9 +296,14 @@ class ChatPanel(private val project: Project) : JBPanel<ChatPanel>(java.awt.Bord
         appendMessage(ErrorMessageBubble(message, type))
     }
 
+    /**
+     * 시스템 안내 메시지 (회색, 이탤릭).
+     * 선택 없음 / 파일 없음 / Java 아님 등 경고 안내에 사용.
+     */
     private fun addSystemMessage(message: String) {
-        val label = JBLabel(message).apply {
+        val label = JBLabel("<html>$message</html>").apply {
             foreground = JBColor.GRAY
+            font = font.deriveFont(Font.ITALIC)
             border = JBUI.Borders.empty(4, 8)
             alignmentX = Component.LEFT_ALIGNMENT
             maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height)
@@ -282,7 +312,6 @@ class ChatPanel(private val project: Project) : JBPanel<ChatPanel>(java.awt.Bord
     }
 
     private fun appendMessage(component: Component) {
-        // 첫 메시지 추가 시 메시지 목록 카드로 전환
         cardLayout.show(cardPanel, "MESSAGES")
 
         messagesBox.add(Box.createRigidArea(Dimension(0, JBUI.scale(8))))
@@ -290,7 +319,6 @@ class ChatPanel(private val project: Project) : JBPanel<ChatPanel>(java.awt.Bord
         messagesBox.revalidate()
         messagesBox.repaint()
 
-        // 자동 스크롤 (레이아웃 완료 후)
         SwingUtilities.invokeLater {
             val vsb = scrollPane.verticalScrollBar
             vsb.value = vsb.maximum
@@ -300,5 +328,17 @@ class ChatPanel(private val project: Project) : JBPanel<ChatPanel>(java.awt.Bord
     private fun setButtonsEnabled(enabled: Boolean) {
         checkSelectionButton.isEnabled = enabled
         checkFileButton.isEnabled = enabled
+    }
+
+    // ── 싱글톤 접근 ──────────────────────────────
+
+    companion object {
+        private val panels = WeakHashMap<Project, ChatPanel>()
+
+        fun getInstance(project: Project): ChatPanel? = panels[project]
+
+        internal fun register(project: Project, panel: ChatPanel) {
+            panels[project] = panel
+        }
     }
 }
