@@ -35,7 +35,7 @@ intellijPlatform {
         version = "0.1.0"
 
         ideaVersion {
-            sinceBuild = "241"
+            sinceBuild = "233"
             untilBuild = provider { null }  // 자동 생성 차단 → 상한선 없음
         }
     }

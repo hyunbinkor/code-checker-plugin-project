@@ -16,7 +16,12 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.ConnectException
 import java.net.SocketTimeoutException
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 @Service(Service.Level.APP)
 class CodeCheckService {
@@ -33,7 +38,6 @@ class CodeCheckService {
         fileName: String,
         onHeartbeat: (() -> Unit)? = null
     ): CheckResult {
-        // Mock 모드 분기
         if (PluginSettings.getInstance().useMockMode) {
             return MockCheckService.checkCode(code, fileName, onHeartbeat)
         }
@@ -48,18 +52,62 @@ class CodeCheckService {
     }
 
     // ────────────────────────────────────────────
-    // 실제 HTTP 구현
+    // OkHttp 클라이언트 빌드
     // ────────────────────────────────────────────
 
     private fun buildClient(): OkHttpClient {
         val settings = PluginSettings.getInstance()
-        return OkHttpClient.Builder()
+        val builder = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .callTimeout(settings.readTimeoutSeconds.toLong(), TimeUnit.SECONDS)
-            .build()
+
+        if (settings.disableSslVerification) {
+            builder.applyTrustAllSsl()
+        }
+
+        return builder.build()
     }
+
+    private fun buildTestClient(): OkHttpClient {
+        val settings = PluginSettings.getInstance()
+        val builder = OkHttpClient.Builder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(5, TimeUnit.SECONDS)
+            .callTimeout(5, TimeUnit.SECONDS)
+
+        // 연결 테스트도 동일하게 SSL 설정 적용
+        if (settings.disableSslVerification) {
+            builder.applyTrustAllSsl()
+        }
+
+        return builder.build()
+    }
+
+    /**
+     * 모든 SSL 인증서를 신뢰하도록 설정.
+     * 내부망 자체 서명 인증서 환경에서만 사용.
+     */
+    private fun OkHttpClient.Builder.applyTrustAllSsl(): OkHttpClient.Builder {
+        val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+        })
+
+        val sslContext = SSLContext.getInstance("TLS").apply {
+            init(null, trustAllCerts, SecureRandom())
+        }
+
+        return this
+            .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
+            .hostnameVerifier { _, _ -> true }
+    }
+
+    // ────────────────────────────────────────────
+    // 실제 HTTP 구현
+    // ────────────────────────────────────────────
 
     private fun executeCheckCode(
         code: String,
@@ -134,17 +182,10 @@ class CodeCheckService {
     private fun executeTestConnection(): Boolean {
         val settings = PluginSettings.getInstance()
         val url = "${settings.serverUrl.trimEnd('/')}/health"
-
         val request = Request.Builder().url(url).get().build()
 
-        val client = OkHttpClient.Builder()
-            .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(5, TimeUnit.SECONDS)
-            .callTimeout(5, TimeUnit.SECONDS)
-            .build()
-
         return try {
-            client.newCall(request).execute().use { it.isSuccessful }
+            buildTestClient().newCall(request).execute().use { it.isSuccessful }
         } catch (e: Exception) {
             false
         }
@@ -180,10 +221,6 @@ class CodeCheckService {
             null
         }
     }
-
-    // ────────────────────────────────────────────
-    // 싱글톤 접근
-    // ────────────────────────────────────────────
 
     companion object {
         fun getInstance(): CodeCheckService = service()

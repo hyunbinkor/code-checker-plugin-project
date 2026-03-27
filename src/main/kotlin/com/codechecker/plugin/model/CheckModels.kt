@@ -30,13 +30,13 @@ data class CheckOptions(
 
 data class CheckResponse(
     @SerializedName("success")
-    val success: Boolean,
+    val success: Boolean = false,
 
     @SerializedName("fileName")
     val fileName: String?,
 
-    @SerializedName("lineCount")
-    val lineCount: Int?,
+    @SerializedName("format")
+    val format: String?,
 
     @SerializedName("chunked")
     val chunked: Boolean?,
@@ -44,25 +44,15 @@ data class CheckResponse(
     @SerializedName("processingTimeMs")
     val processingTimeMs: Long?,
 
-    @SerializedName("format")
-    val format: String?,
-
     @SerializedName("issues")
     val issues: List<Issue>?,
 
     @SerializedName("summary")
     val summary: Summary?,
 
-    @SerializedName("tags")
-    val tags: List<String>?,
-
-    @SerializedName("matchedRulesCount")
-    val matchedRulesCount: Int?,
-
     @SerializedName("stats")
     val stats: CheckStats?,
 
-    // 에러 응답 필드
     @SerializedName("error")
     val error: String?,
 
@@ -87,17 +77,8 @@ data class Issue(
     @SerializedName("line")
     val line: Int?,
 
-    @SerializedName("column")
-    val column: Int?,
-
-    @SerializedName("endLine")
-    val endLine: Int?,
-
-    @SerializedName("endColumn")
-    val endColumn: Int?,
-
-    @SerializedName("message")
-    val message: String,
+    @SerializedName("description")
+    val description: String?,
 
     @SerializedName("suggestion")
     val suggestion: String?,
@@ -111,9 +92,11 @@ data class Issue(
     @SerializedName("methodName")
     val methodName: String?
 ) {
-    // Gson이 severityRaw를 채운 뒤 편의 접근용으로 사용
     val severity: Severity
         get() = Severity.fromString(severityRaw)
+
+    val displayMessage: String
+        get() = description?.takeIf { it.isNotBlank() } ?: title
 }
 
 // ────────────────────────────────────────────
@@ -124,21 +107,41 @@ data class Summary(
     @SerializedName("totalIssues")
     val totalIssues: Int,
 
-    // { "CRITICAL": 1, "HIGH": 2, ... }
     @SerializedName("bySeverity")
     val bySeverity: Map<String, Int>,
 
-    // { "security": 1, "exception_handling": 1, ... }
+    @SerializedName("byClass")
+    val byClass: Map<String, Int>?,
+
+    @SerializedName("byMethod")
+    val byMethod: Map<String, Int>?,
+
     @SerializedName("byCategory")
-    val byCategory: Map<String, Int>
+    val byCategory: Map<String, Int>?
 )
 
+// ────────────────────────────────────────────
+// 통계
+// ────────────────────────────────────────────
+
 data class CheckStats(
+    @SerializedName("totalChecks")
+    val totalChecks: Int?,
+
+    @SerializedName("pureRegexViolations")
+    val pureRegexViolations: Int?,
+
+    @SerializedName("llmCandidates")
+    val llmCandidates: Int?,
+
     @SerializedName("llmCalls")
-    val llmCalls: Int,
+    val llmCalls: Int?,
+
+    @SerializedName("falsePositivesFiltered")
+    val falsePositivesFiltered: Int?,
 
     @SerializedName("processingTime")
-    val processingTime: Long
+    val processingTime: Long?
 )
 
 // ────────────────────────────────────────────
@@ -184,15 +187,8 @@ sealed class CheckResult {
 }
 
 enum class ErrorType {
-    /** 서버에 연결할 수 없음 (UnknownHostException, ConnectException 등) */
     NETWORK,
-
-    /** 서버 응답이 제한 시간 내에 오지 않음 */
     TIMEOUT,
-
-    /** 서버가 success=false 응답 반환 */
     SERVER_ERROR,
-
-    /** 응답 JSON 파싱 실패 */
     PARSE_ERROR
 }

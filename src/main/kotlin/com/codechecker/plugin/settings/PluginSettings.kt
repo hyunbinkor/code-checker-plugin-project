@@ -17,16 +17,14 @@ class PluginSettings : PersistentStateComponent<PluginSettings.State> {
         var serverUrl: String = "http://localhost:3000",
         var readTimeoutSeconds: Int = 900,
         var outputFormat: String = "json",
-        var useMockMode: Boolean = false
+        var useMockMode: Boolean = false,
+        var disableSslVerification: Boolean = false
     )
 
     private var state = State()
 
     override fun getState(): State = state
-
-    override fun loadState(state: State) {
-        this.state = state
-    }
+    override fun loadState(state: State) { this.state = state }
 
     var serverUrl: String
         get() = state.serverUrl
@@ -43,6 +41,10 @@ class PluginSettings : PersistentStateComponent<PluginSettings.State> {
     var useMockMode: Boolean
         get() = state.useMockMode
         set(value) { state.useMockMode = value }
+
+    var disableSslVerification: Boolean
+        get() = state.disableSslVerification
+        set(value) { state.disableSslVerification = value }
 
     companion object {
         fun getInstance(): PluginSettings = service()

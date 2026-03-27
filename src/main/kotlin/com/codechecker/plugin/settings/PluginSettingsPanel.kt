@@ -19,10 +19,6 @@ import javax.swing.JButton
 import javax.swing.JComboBox
 import javax.swing.JPanel
 
-/**
- * 설정 UI 레이아웃.
- * [PluginSettingsConfigurable]에서 생성하며, [root]를 Settings 패널로 사용함.
- */
 class PluginSettingsPanel {
 
     // ── UI 컴포넌트 ──────────────────────────────
@@ -34,7 +30,6 @@ class PluginSettingsPanel {
     }
 
     private val readTimeoutField = JBTextField().apply {
-        // 숫자만 입력 허용 (문서 필터)
         (document as javax.swing.text.AbstractDocument).documentFilter =
             DigitsOnlyFilter()
     }
@@ -43,6 +38,8 @@ class PluginSettingsPanel {
 
     private val useMockModeCheckBox = JBCheckBox("Mock 모드 사용 (실제 서버 없이 UI 테스트)")
 
+    private val disableSslVerificationCheckBox = JBCheckBox("SSL 인증서 검증 비활성화 (내부망 자체 인증서 사용 시)")
+
     // ── 루트 패널 ────────────────────────────────
 
     val root: JPanel = buildRootPanel()
@@ -50,7 +47,7 @@ class PluginSettingsPanel {
     // ── 초기화 ───────────────────────────────────
 
     init {
-        reset()                          // 저장된 설정값으로 UI 초기화
+        reset()
         setupConnectionTestButton()
     }
 
@@ -62,6 +59,7 @@ class PluginSettingsPanel {
                 || readTimeoutField.text.trim().toIntOrNull() != settings.readTimeoutSeconds
                 || outputFormatCombo.selectedItem as? String != settings.outputFormat
                 || useMockModeCheckBox.isSelected != settings.useMockMode
+                || disableSslVerificationCheckBox.isSelected != settings.disableSslVerification
     }
 
     fun apply() {
@@ -71,6 +69,7 @@ class PluginSettingsPanel {
             readTimeoutField.text.trim().toIntOrNull() ?: PluginSettings.State().readTimeoutSeconds
         settings.outputFormat = outputFormatCombo.selectedItem as? String ?: "json"
         settings.useMockMode = useMockModeCheckBox.isSelected
+        settings.disableSslVerification = disableSslVerificationCheckBox.isSelected
     }
 
     fun reset() {
@@ -79,6 +78,7 @@ class PluginSettingsPanel {
         readTimeoutField.text = settings.readTimeoutSeconds.toString()
         outputFormatCombo.selectedItem = settings.outputFormat
         useMockModeCheckBox.isSelected = settings.useMockMode
+        disableSslVerificationCheckBox.isSelected = settings.disableSslVerification
         hideConnectionStatus()
     }
 
@@ -154,7 +154,7 @@ class PluginSettingsPanel {
         }
         panel.add(formatPanel, gbc)
 
-        // ── Mock 모드 ──
+        // ── 섹션 구분선: 개발/테스트 ──
         gbc.gridy = row++
         gbc.gridx = 0
         gbc.gridwidth = 2
@@ -162,9 +162,28 @@ class PluginSettingsPanel {
         gbc.insets = JBUI.insets(12, 0, 4, 0)
         panel.add(buildSectionSeparator("개발/테스트"), gbc)
 
+        // ── Mock 모드 ──
         gbc.gridy = row++
         gbc.insets = JBUI.insets(4, 0, 4, 0)
         panel.add(useMockModeCheckBox, gbc)
+
+        // ── 섹션 구분선: 네트워크 ──
+        gbc.gridy = row++
+        gbc.insets = JBUI.insets(12, 0, 4, 0)
+        panel.add(buildSectionSeparator("네트워크"), gbc)
+
+        // ── SSL 검증 비활성화 ──
+        gbc.gridy = row++
+        gbc.insets = JBUI.insets(4, 0, 4, 0)
+        panel.add(disableSslVerificationCheckBox, gbc)
+
+        // SSL 경고 레이블
+        gbc.gridy = row++
+        gbc.insets = JBUI.insets(0, 0, 4, 0)
+        panel.add(JBLabel("  ⚠️ 보안 주의: 신뢰할 수 있는 내부망에서만 사용하세요.").apply {
+            foreground = JBColor(Color(0xE65100), Color(0xFFB74D))
+            font = font.deriveFont(font.size2D - 1f)
+        }, gbc)
 
         // ── 하단 여백 채우기 ──
         gbc.gridy = row
@@ -198,26 +217,28 @@ class PluginSettingsPanel {
                 return@addActionListener
             }
 
-            // 버튼 비활성화 + 테스트 중 표시
             testConnectionButton.isEnabled = false
             showConnectionStatus(null, "연결 테스트 중...")
 
-            // 백그라운드에서 연결 테스트
             ApplicationManager.getApplication().executeOnPooledThread {
-                // 현재 입력된 URL로 임시 테스트 (아직 apply 전이므로 직접 전달)
                 val originalUrl = PluginSettings.getInstance().serverUrl
+                val originalSsl = PluginSettings.getInstance().disableSslVerification
+
+                // 현재 UI 값으로 임시 적용 (apply 전이므로)
                 PluginSettings.getInstance().serverUrl = url
+                PluginSettings.getInstance().disableSslVerification =
+                    disableSslVerificationCheckBox.isSelected
 
                 val success = try {
                     CodeCheckService.getInstance().testConnection()
                 } catch (e: Exception) {
                     false
                 } finally {
-                    // 테스트용으로 바꾼 URL 복원 (apply 전이므로)
+                    // 원래 값 복원
                     PluginSettings.getInstance().serverUrl = originalUrl
+                    PluginSettings.getInstance().disableSslVerification = originalSsl
                 }
 
-                // EDT에서 UI 업데이트
                 ApplicationManager.getApplication().invokeLater {
                     testConnectionButton.isEnabled = true
                     if (success) {
@@ -230,9 +251,6 @@ class PluginSettingsPanel {
         }
     }
 
-    /**
-     * @param success true=성공(초록), false=실패(빨강), null=진행중(기본색)
-     */
     private fun showConnectionStatus(success: Boolean?, message: String) {
         connectionStatusLabel.text = message
         connectionStatusLabel.foreground = when (success) {

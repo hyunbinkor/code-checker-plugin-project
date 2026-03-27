@@ -1,7 +1,6 @@
 package com.codechecker.plugin.ui
 
 import com.codechecker.plugin.model.CheckResponse
-import com.codechecker.plugin.model.Severity
 import com.intellij.openapi.project.Project
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
@@ -14,11 +13,6 @@ import java.awt.Dimension
 import javax.swing.Box
 import javax.swing.BoxLayout
 
-/**
- * 검사 결과 버블.
- * - 이슈 있음: SummaryBar + IssueCard 목록 + 처리 정보
- * - 이슈 없음: "✅ 이슈가 발견되지 않았습니다"
- */
 class ResultMessageBubble(
     response: CheckResponse,
     project: Project
@@ -84,13 +78,10 @@ class ResultMessageBubble(
             container.add(Box.createRigidArea(Dimension(0, JBUI.scale(4))))
         }
 
-        // 처리 정보
-        val infoText = buildString {
-            response.processingTimeMs?.let { append("⏱️ ${it}ms") }
-            response.matchedRulesCount?.let { append(" · ${it}개 규칙 매칭") }
-        }
-        if (infoText.isNotBlank()) {
-            val infoLabel = JBLabel(infoText).apply {
+        // 처리 정보 (processingTimeMs만 표시, matchedRulesCount 제거)
+        val processingTimeMs = response.processingTimeMs
+        if (processingTimeMs != null) {
+            val infoLabel = JBLabel("⏱️ ${processingTimeMs}ms").apply {
                 foreground = JBColor.GRAY
                 font = font.deriveFont(font.size2D - 1f)
                 alignmentX = Component.LEFT_ALIGNMENT
